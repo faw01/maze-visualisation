@@ -4,6 +4,7 @@ environ['PYGAME_HIDE_SUPPORT_PROMPT'] = '1'
 import pygame
 import sys
 from collections import deque
+import random 
 
 # Constants
 SCREEN_WIDTH = 750
@@ -149,7 +150,7 @@ class Maze:
         stack = [(start.x, start.y)]
         prev = {(start.x, start.y): None}
 
-        directions = [(0, -1), (-1, 0), (0, 1), (1, 0)]
+        directions = [(-1, 0), (0, -1), (1, 0), (0, 1)]
         found = False
 
         while stack and not found:
@@ -203,6 +204,17 @@ class Maze:
                 drawer.draw_grid()
                 pygame.display.flip()
                 clock.tick(60)
+
+            # Pause and wait for mouse click to continue
+            waiting = True
+            while waiting:
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        pygame.quit()
+                        sys.exit()
+                    if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:  # Check for mouse1 click
+                        waiting = False
+
         return found
     
 
@@ -229,6 +241,7 @@ class Maze:
         found = False
 
         while True:
+            # Event handling to prevent the application from freezing
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     pygame.quit()
@@ -241,6 +254,7 @@ class Maze:
                     if not visited[i][j] and distances[i][j] < min_distance:
                         min_distance = distances[i][j]
                         x, y = i, j
+
             if x == -1:
                 break
 
@@ -275,6 +289,8 @@ class Maze:
             x, y = end.x, end.y
             while (x, y) != (start.x, start.y):
                 path.append((x, y))
+                if (x, y) not in prev:  # Check to break out of loop if path is incomplete
+                    break
                 x, y = prev[(x, y)]
             path.reverse()
 
@@ -284,7 +300,102 @@ class Maze:
                 drawer.draw_grid()
                 pygame.display.flip()
                 clock.tick(60)
+
+            # Pause and wait for mouse click to continue
+            waiting = True
+            while waiting:
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        pygame.quit()
+                        sys.exit()
+                    if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:  # Check for mouse1 click
+                        waiting = False
+
         return found
+
+    def heuristic(self, a, b):
+        return abs(a[0] - b[0]) + abs(a[1] - b[1])
+
+    def solve_with_a_star(self, screen, clock, drawer):
+        start = None
+        end = None
+        for row in self.grid:
+            for cell in row:
+                if cell.is_start:
+                    start = cell
+                if cell.is_end:
+                    end = cell
+
+        if not start or not end:
+            print("No start or end defined!")
+            return False
+
+        open_set = [(start.x, start.y)]
+        came_from = {}
+        g_score = {(cell.x, cell.y): float('inf') for row in self.grid for cell in row}
+        g_score[(start.x, start.y)] = 0
+        f_score = {(cell.x, cell.y): float('inf') for row in self.grid for cell in row}
+        f_score[(start.x, start.y)] = self.heuristic((start.x, start.y), (end.x, end.y))
+
+        directions = [(0, -1), (-1, 0), (0, 1), (1, 0)]
+
+        while open_set:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    sys.exit()
+
+            current = min(open_set, key=lambda coord: f_score[coord])
+            if current == (end.x, end.y):
+                path = []
+                while current in came_from:
+                    path.append(current)
+                    current = came_from[current]
+                path.append((start.x, start.y))
+                path.reverse()
+
+                for x, y in path:
+                    pygame.draw.rect(screen, YELLOW, (x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE))
+                    self.draw(screen)
+                    drawer.draw_grid()
+                    pygame.display.flip()
+                    clock.tick(60)
+
+                # Pause and wait for mouse click to continue
+                waiting = True
+                while waiting:
+                    for event in pygame.event.get():
+                        if event.type == pygame.QUIT:
+                            pygame.quit()
+                            sys.exit()
+                        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:  # Check for mouse1 click
+                            waiting = False
+
+                return True
+
+            open_set.remove(current)
+            for dx, dy in directions:
+                nx, ny = current[0] + dx, current[1] + dy
+                if 0 <= nx < self.cols and 0 <= ny < self.rows and not self.grid[nx][ny].is_wall:
+                    tentative_g_score = g_score[current] + 1
+                    if tentative_g_score < g_score[(nx, ny)]:
+                        came_from[(nx, ny)] = current
+                        g_score[(nx, ny)] = tentative_g_score
+                        f_score[(nx, ny)] = g_score[(nx, ny)] + self.heuristic((nx, ny), (end.x, end.y))
+                        if (nx, ny) not in open_set:
+                            open_set.append((nx, ny))
+
+            # Draw the maze and grid
+            self.draw(screen)
+            drawer.draw_grid()
+            for coord in open_set:
+                pygame.draw.rect(screen, PURPLE, (coord[0] * CELL_SIZE, coord[1] * CELL_SIZE, CELL_SIZE, CELL_SIZE), 1)
+            pygame.display.flip()
+            clock.tick(60)
+
+        return False
+
+
 
 
 class Button:
@@ -358,7 +469,8 @@ class MazeDrawer:
         self.showing_path = True
 
     def solve_with_a_star(self):
-        pass  # TODO: Implement A*
+        self.maze.solve_with_a_star(self.screen, self.clock, self)
+        self.showing_path = True
 
     def toggle_algo_buttons(self):
         self.show_algo_buttons = not self.show_algo_buttons
